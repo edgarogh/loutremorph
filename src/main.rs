@@ -1,14 +1,19 @@
 mod cli;
+mod encoder;
+mod points;
 
 use clap::Parser;
 use cli::Cli;
+use encoder::GifEncoder;
 use image::buffer::ConvertBuffer;
-use image::codecs::gif::{GifEncoder, Repeat};
 use image::imageops::FilterType;
-use image::{Frame, RgbaImage};
-use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
+use image::RgbaImage;
+use indicatif::{MultiProgress, ProgressBar, ProgressIterator, ProgressStyle};
 use interpolation::Lerp;
+use points::Points;
 use rayon::prelude::*;
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
 
 lazy_static::lazy_static! {
     static ref PROGRESS_STYLE: ProgressStyle = {
@@ -20,10 +25,12 @@ lazy_static::lazy_static! {
 }
 
 /// Create a progress bar quickly
-fn pb(count: usize, message: &'static str) -> ProgressBar {
-    ProgressBar::new(count as u64)
-        .with_message(message)
-        .with_style(PROGRESS_STYLE.clone())
+fn pb(multi_progress: &MultiProgress, count: usize, message: &'static str) -> ProgressBar {
+    multi_progress.add(
+        ProgressBar::new(count as u64)
+            .with_message(message)
+            .with_style(PROGRESS_STYLE.clone()),
+    )
 }
 
 fn change_alpha(img: &mut RgbaImage, opacity: f32) {
@@ -41,82 +48,43 @@ fn main() {
     let cli = Cli::parse();
     let output_path = cli.output();
 
-    let from = image::open(&cli.img_human).unwrap().into_rgb8();
-    let to = image::open(&cli.img_otter).unwrap().into_rgb8();
+    let human_img = image::open(&cli.img_human).unwrap().into_rgb8();
+    let otter_img = image::open(&cli.img_otter).unwrap().into_rgb8();
 
-    assert_eq!(from.dimensions(), (2048, 2048));
-    assert_eq!(to.dimensions(), (2048, 2048));
+    assert_eq!(human_img.dimensions(), otter_img.dimensions());
 
-    let points_reader = csv::Reader::from_path(&cli.points_csv).unwrap();
+    let points = Points::read(BufReader::new(File::open(&cli.points_csv).unwrap()));
+    let (ratios, steps) = points.interpolate(cli.interp_len);
 
-    let (human_points, otter_points) = points_reader
-        .into_records()
-        .enumerate()
-        .filter_map(|(idx, record)| {
-            let record = record.unwrap();
-            if idx == 0 && record.iter().eq(["hx", "hy", "ox", "oy"]) {
-                None
-            } else {
-                Some(record)
-            }
-        })
-        .map(|record| {
-            assert_eq!(record.len(), 4);
+    let multi_progress = MultiProgress::new();
+    let progress_interpolation = pb(&multi_progress, cli.interp_len, "computing interpolation");
+    let progress_encoding = pb(&multi_progress, cli.interp_len * 2 + 2, "encoding gif");
 
-            let mut floats = record.iter().map(|str| str.trim()).map(|s| {
-                s.parse::<f32>()
-                    .map_err(|e| e.to_string())
-                    .or_else(|_| {
-                        s.parse::<u32>()
-                            .map(|n| n as f32)
-                            .map_err(|e| e.to_string())
-                    })
-                    .expect(s)
-            });
+    let gif_encoder = GifEncoder::new(
+        BufWriter::new(File::create(&cli.output()).unwrap()),
+        progress_encoding,
+    );
 
-            (
-                (
-                    floats.next().unwrap_or_default(),
-                    floats.next().unwrap_or_default(),
-                ),
-                (
-                    floats.next().unwrap_or_default(),
-                    floats.next().unwrap_or_default(),
-                ),
-            )
-        })
-        .unzip::<_, _, Vec<(f32, f32)>, Vec<(f32, f32)>>();
-
-    let ratios = (0..cli.interp_len)
-        .map(|step| step as f32 / (cli.interp_len - 1) as f32)
-        .collect::<Vec<_>>();
-
-    let steps = ratios
-        .iter()
-        .map(|ratio| {
-            human_points
-                .iter()
-                .zip(&otter_points)
-                .map(|(a, b)| (a.0.lerp(&b.0, ratio), a.1.lerp(&b.1, ratio)))
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
+    gif_encoder.write_frame(
+        image::imageops::resize(&human_img, 256, 256, FilterType::Nearest).convert(),
+        cli.pause_duration(),
+    );
 
     let frames = steps
         .iter()
         .zip(ratios)
         .map(|(dst, ratio)| {
             let mut warped = moving_least_squares_image::reverse_dense(
-                &from,
-                &human_points,
+                &human_img,
+                &points.human,
                 dst,
                 moving_least_squares::deform_affine,
             )
             .convert();
 
             let mut warped_reverse = moving_least_squares_image::reverse_dense(
-                &to,
-                &otter_points,
+                &otter_img,
+                &points.otter,
                 dst,
                 moving_least_squares::deform_affine,
             )
@@ -125,30 +93,25 @@ fn main() {
             change_alpha(&mut warped, 1.0 - ratio);
             image::imageops::overlay(&mut warped_reverse, &warped, 0, 0);
 
-            image::imageops::resize(&warped_reverse, 256, 256, FilterType::Nearest)
+            let frame = image::imageops::resize(&warped_reverse, 256, 256, FilterType::Gaussian);
+
+            gif_encoder.write_frame(frame.clone(), cli.frame_duration());
+
+            frame
         })
-        .progress_with(pb(cli.interp_len, "computing interpolation"))
+        .progress_with(progress_interpolation)
         .collect::<Vec<_>>();
 
-    // Compo
-    let mut gif = GifEncoder::new(std::fs::File::create(&output_path).unwrap());
-    gif.set_repeat(Repeat::Infinite).unwrap();
+    gif_encoder.write_frame(
+        image::imageops::resize(&otter_img, 256, 256, FilterType::Nearest).convert(),
+        cli.pause_duration(),
+    );
 
-    let compo = std::iter::repeat(&frames[0])
-        .take(cli.pause_len)
-        .chain(frames.iter())
-        .chain(std::iter::repeat(frames.last().unwrap()).take(cli.pause_len))
-        .chain(frames.iter().rev())
-        .collect::<Vec<_>>();
+    frames.into_iter().rev().for_each(|img| {
+        gif_encoder.write_frame(img.clone(), cli.frame_duration());
+    });
 
-    let compo_len = compo.len();
-    for frame in compo
-        .into_iter()
-        .progress_with(pb(compo_len, "encoding gif"))
-    {
-        gif.encode_frame(Frame::from_parts(frame.clone(), 0, 0, cli.frame_duration()))
-            .unwrap()
-    }
+    gif_encoder.flush().unwrap();
 
     #[cfg(feature = "opener")]
     if cli.open_gif_after {

@@ -21,7 +21,7 @@ pub struct Cli {
 
     /// Number of static frames between interpolations
     #[clap(short = 'p', long, default_value_t = 15)]
-    pub pause_len: usize,
+    pub pause_len: u32,
 
     /// Open the GIF file after it has been generated
     #[cfg(feature = "opener")]
@@ -42,6 +42,10 @@ pub struct Cli {
 }
 
 impl Cli {
+    pub fn pause_duration(&self) -> image::Delay {
+        image::Delay::from_numer_denom_ms(self.frame_duration * self.pause_len, 1)
+    }
+
     pub fn frame_duration(&self) -> image::Delay {
         image::Delay::from_numer_denom_ms(self.frame_duration, 1)
     }
