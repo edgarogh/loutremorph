@@ -94,6 +94,7 @@ fn main() {
         cli.pause_duration(),
     );
 
+    #[allow(clippy::needless_collect)]
     let frames = steps
         .iter()
         .zip(ratios)
@@ -132,7 +133,7 @@ fn main() {
     );
 
     frames.into_iter().rev().for_each(|img| {
-        gif_encoder.write_frame(img.clone(), cli.frame_duration());
+        gif_encoder.write_frame(img, cli.frame_duration());
     });
 
     gif_encoder.flush().unwrap();
