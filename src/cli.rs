@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::ffi::OsStr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(clap::Parser)]
 #[clap(author, version, about)]
@@ -28,17 +28,19 @@ pub struct Cli {
     #[clap(name = "open", long)]
     pub open_gif_after: bool,
 
-    /// Path to an image representing a human face
-    pub img_human: PathBuf,
+    /// Path to an image representing a human face OR name of all files
+    pub img_human: String,
 
     /// Path to an image representing an otter
-    pub img_otter: PathBuf,
+    #[clap(requires = "points_csv")]
+    pub img_otter: Option<PathBuf>,
 
     /// Path to a 4-column CSV file containing interpolated points
     ///
     /// The first 2 columns are (x, y) coordinates of a point on the human face file.
     /// The last 2 are (x, y) coordinates of the corresponding point on the otter.
-    pub points_csv: PathBuf,
+    #[clap(group = "points_csv")]
+    pub points_csv: Option<PathBuf>,
 }
 
 impl Cli {
@@ -51,7 +53,10 @@ impl Cli {
     }
 
     fn name(&self) -> Cow<str> {
-        self.img_human.file_stem().unwrap().to_string_lossy()
+        Path::new(&self.img_human)
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
     }
 
     pub fn output(&self) -> Cow<OsStr> {

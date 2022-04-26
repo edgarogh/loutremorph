@@ -12,8 +12,10 @@ use indicatif::{MultiProgress, ProgressBar, ProgressIterator, ProgressStyle};
 use interpolation::Lerp;
 use points::Points;
 use rayon::prelude::*;
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
+use std::path::Path;
 
 lazy_static::lazy_static! {
     static ref PROGRESS_STYLE: ProgressStyle = {
@@ -47,13 +49,35 @@ fn change_alpha(img: &mut RgbaImage, opacity: f32) {
 fn main() {
     let cli = Cli::parse();
     let output_path = cli.output();
+    let (img_human, img_otter, points_csv) = match &cli {
+        Cli {
+            img_human,
+            img_otter: Some(img_otter),
+            points_csv: Some(points_csv),
+            ..
+        } => (
+            Cow::Borrowed(Path::new(img_human.as_str())),
+            Cow::Borrowed(img_otter.as_path()),
+            Cow::Borrowed(points_csv.as_path()),
+        ),
+        Cli {
+            img_human: name,
+            img_otter: _,
+            points_csv: _,
+            ..
+        } => (
+            Cow::Owned(format!("{name}.png").into()),
+            Cow::Owned(format!("{name}_l.png").into()),
+            Cow::Owned(format!("{name}.csv").into()),
+        ),
+    };
 
-    let human_img = image::open(&cli.img_human).unwrap().into_rgb8();
-    let otter_img = image::open(&cli.img_otter).unwrap().into_rgb8();
+    let human_img = image::open(&img_human).unwrap().into_rgb8();
+    let otter_img = image::open(&img_otter).unwrap().into_rgb8();
 
     assert_eq!(human_img.dimensions(), otter_img.dimensions());
 
-    let points = Points::read(BufReader::new(File::open(&cli.points_csv).unwrap()));
+    let points = Points::read(BufReader::new(File::open(&points_csv).unwrap()));
     let (ratios, steps) = points.interpolate(cli.interp_len);
 
     let multi_progress = MultiProgress::new();
