@@ -72,12 +72,12 @@ fn main() {
         ),
     };
 
-    let human_img = image::open(&img_human).unwrap().into_rgb8();
-    let otter_img = image::open(&img_otter).unwrap().into_rgb8();
+    let human_img = image::open(img_human).unwrap().into_rgb8();
+    let otter_img = image::open(img_otter).unwrap().into_rgb8();
 
     assert_eq!(human_img.dimensions(), otter_img.dimensions());
 
-    let points = Points::read(BufReader::new(File::open(&points_csv).unwrap()));
+    let points = Points::read(BufReader::new(File::open(points_csv).unwrap()));
     let (ratios, steps) = points.interpolate(cli.interp_len);
 
     let multi_progress = MultiProgress::new();
@@ -85,7 +85,7 @@ fn main() {
     let progress_encoding = pb(&multi_progress, cli.interp_len * 2 + 2, "encoding gif");
 
     let gif_encoder = GifEncoder::new(
-        BufWriter::new(File::create(&cli.output()).unwrap()),
+        BufWriter::new(File::create(cli.output()).unwrap()),
         progress_encoding,
     );
 

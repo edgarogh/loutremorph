@@ -26,7 +26,7 @@ impl Points {
             .map(|record| {
                 assert_eq!(record.len(), 4);
 
-                let mut floats = record.iter().map(|str| str.trim()).map(|s| {
+                let mut floats = record.iter().map(str::trim).map(|s| {
                     s.parse::<f32>()
                         .map_err(|e| e.to_string())
                         .or_else(|_| {
