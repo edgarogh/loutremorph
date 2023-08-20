@@ -32,14 +32,14 @@ pub struct Cli {
     pub img_human: String,
 
     /// Path to an image representing an otter
-    #[clap(requires = "points_csv")]
+    #[clap(requires = "points_csv_group")]
     pub img_otter: Option<PathBuf>,
 
     /// Path to a 4-column CSV file containing interpolated points
     ///
     /// The first 2 columns are (x, y) coordinates of a point on the human face file.
     /// The last 2 are (x, y) coordinates of the corresponding point on the otter.
-    #[clap(group = "points_csv")]
+    #[clap(group = "points_csv_group")]
     pub points_csv: Option<PathBuf>,
 }
 

@@ -7,13 +7,13 @@ edition = "2021"
 default = ["opener"]
 
 [dependencies]
-clap = { version = "3.1.10", features = ["derive"] }
-csv = "1.1.6"
-image = "0.23"
-indicatif = { version = "0.17.0-rc.10", features = ["rayon"] }
+clap = { version = "4.3.23", features = ["derive"] }
+csv = "1.2.2"
+image = "0.23.14"
+indicatif = { version = "0.17.6", features = ["rayon"] }
 interpolation = "0.2.0"
 lazy_static = "1.4.0"
-moving-least-squares-image = { git = "https://github.com/edgarogh/rust_mls", rev = "c8b09d0aae52ca2bfbf3c2c6ef0a6f3f94ec3484", features = ["rayon"] }
-moving-least-squares = { git = "https://github.com/edgarogh/rust_mls", rev = "c8b09d0aae52ca2bfbf3c2c6ef0a6f3f94ec3484" }
-opener = { version = "0.5.0", optional = true }
-rayon = "1.5.2"
+moving-least-squares-image = { version = "0.1.1", features = ["rayon"] }
+moving-least-squares = "0.1.0"
+opener = { version = "0.6.1", optional = true }
+rayon = "1.7.0"
